@@ -298,8 +298,11 @@ body {
 }
 
 .signature-section {
+    position: relative;
+    bottom: 22mm;
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    justify-content: flex-start;
     margin-top: auto;
     /* padding-bottom: 20px; */
 }

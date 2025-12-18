@@ -194,14 +194,22 @@
                 return;
             }
 
-            html2pdf().set({
+            // Options to ensure strict A4 alignment without margins
+            const opt = {
                 margin: 0,
                 filename: 'HOSPkart_Letterhead.pdf',
                 image: { type: 'jpeg', quality: 1.0 },
                 html2canvas: {
-                    scale: 3,               // 🔥 critical for sharp image
+                    scale: 2, // 2 is usually sufficient and faster; 3 is fine for high res
                     useCORS: true,
-                    backgroundColor: '#ffffff'
+                    backgroundColor: '#ffffff',
+                    // Key settings to remove extra whitespace:
+                    scrollX: 0,
+                    scrollY: 0,
+                    x: 0,
+                    y: 0,
+                    width: element.offsetWidth, // Force canvas to match element width exactly
+                    windowWidth: element.offsetWidth // Simulate window width matching element
                 },
                 jsPDF: {
                     unit: 'mm',
@@ -209,10 +217,10 @@
                     orientation: 'portrait'
                 },
                 pagebreak: { mode: ['css'] }
-            }).from(element).save();
+            };
 
+            html2pdf().set(opt).from(element).save();
         }
-
     </script>
 
 
