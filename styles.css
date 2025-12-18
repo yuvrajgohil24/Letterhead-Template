@@ -351,7 +351,7 @@ body {
 }
 
 .footer-address {
-    margin-left: 12%;
+    padding-left: 16px;
     /* text-align: center; */
     margin-bottom: 12px;
     font-weight: 300;
@@ -359,7 +359,7 @@ body {
 
 .footer-contacts {
     display: flex;
-    justify-content: center;
+    justify-content: space-around;
     gap: 40px;
     align-items: center;
     margin-top: 5px;
