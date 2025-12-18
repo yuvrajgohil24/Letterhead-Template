@@ -318,6 +318,16 @@ body {
     /* padding-bottom: 20px; */
 }
 
+.signature-section2 {
+    position: relative;
+    top: 22mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    margin-top: auto;
+    /* padding-bottom: 20px; */
+}
+
 .signature-block {
     text-align: left;
 }
