@@ -57,6 +57,18 @@ body {
     box-shadow: 0 6px 20px rgba(243, 128, 32, 0.4);
 }
 
+.page-select {
+    padding: 12px 20px;
+    font-size: 14px;
+    border: 2px solid var(--brand-blue);
+    border-radius: 6px;
+    margin-right: 15px;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--brand-blue);
+    font-weight: 500;
+}
+
 .page {
     width: 210mm;
     height: 297mm;
@@ -103,7 +115,7 @@ body {
 .letterhead-header {
     margin-top: 30px;
     width: 100%;
-    height: 120px;
+    /* height: 120px; REMOVED FIXED HEIGHT */
     display: flex;
     position: relative;
     background: #fff;
@@ -113,17 +125,16 @@ body {
 /* IMAGE HEADER */
 .image-header {
     width: 100%;
-    height: 120px;
+    /* height: 120px; REMOVED FIXED HEIGHT */
     /* must match header height */
     overflow: hidden;
 }
 
 .header-img {
     width: 100%;
-    height: 100%;
+    height: auto;
     display: block;
-    object-fit: cover;
-    /* keeps angles intact */
+    /* object-fit: cover; REMOVED to prevent cropping */
 
     /* improves PDF sharpness */
     image-rendering: -webkit-optimize-contrast;

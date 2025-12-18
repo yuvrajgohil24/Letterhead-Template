@@ -12,12 +12,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
         rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
+    <link rel="icon" type="image/png" href="favicon.png">
 </head>
 
 <body>
     <div class="controls">
         <p>Click any text field to edit, then download as PDF</p>
+        <select id="pageSelect" class="page-select">
+            <option value="both">Download Both Pages</option>
+            <option value="page1">Download Page 1 Only</option>
+        </select>
         <button class="download-btn" onclick="downloadPDF()">📄 Download as PDF</button>
     </div>
 
@@ -185,12 +189,21 @@
         </div>
     </div>
 
+    <!-- Duplicate controls removed -->
+
     <script>
         function downloadPDF() {
-            const element = document.getElementById('pdf-root');
+            const pageSelect = document.getElementById('pageSelect').value;
+            let element;
+
+            if (pageSelect === 'page1') {
+                element = document.getElementById('page1');
+            } else {
+                element = document.getElementById('pdf-root');
+            }
 
             if (!element) {
-                alert('PDF root not found');
+                alert('Content to download not found');
                 return;
             }
 
@@ -200,7 +213,7 @@
                 filename: 'HOSPkart_Letterhead.pdf',
                 image: { type: 'jpeg', quality: 1.0 },
                 html2canvas: {
-                    scale: 2, // 2 is usually sufficient and faster; 3 is fine for high res
+                    scale: 2,
                     useCORS: true,
                     backgroundColor: '#ffffff',
                     // Key settings to remove extra whitespace:
