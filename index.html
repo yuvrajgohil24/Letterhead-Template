@@ -207,18 +207,14 @@
     <!-- Duplicate controls removed -->
 
     <script>
+        const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbya_xwH1Xzdm8ErfCtnca_I6TcTuwcNq-BFdnU1_iKmXHuwWq7XMpvT9INMW_Ch3rkC/exec";
+
         function downloadPDF() {
             const pageSelect = document.getElementById('pageSelect').value;
-            let element;
-
-            if (pageSelect === 'page1') {
-                element = document.getElementById('page1');
-            } else {
-                element = document.getElementById('pdf-root');
-            }
+            const element = (pageSelect === 'page1') ? document.getElementById('page1') : document.getElementById('pdf-root');
 
             if (!element) {
-                alert('Content to download not found');
+                console.error('Content to download not found');
                 return;
             }
 
@@ -231,13 +227,12 @@
                     scale: 2,
                     useCORS: true,
                     backgroundColor: '#ffffff',
-                    // Key settings to remove extra whitespace:
                     scrollX: 0,
                     scrollY: 0,
                     x: 0,
                     y: 0,
-                    width: element.offsetWidth, // Force canvas to match element width exactly
-                    windowWidth: element.offsetWidth // Simulate window width matching element
+                    width: element.offsetWidth,
+                    windowWidth: element.offsetWidth
                 },
                 jsPDF: {
                     unit: 'mm',
@@ -247,7 +242,32 @@
                 pagebreak: { mode: ['css'] }
             };
 
-            html2pdf().set(opt).from(element).save();
+            // Use a stable chain: toPdf() -> get('pdf') -> save() -> output()
+            // This prevents the 'removeChild' error by ensuring operations are sequential
+            html2pdf().set(opt).from(element).toPdf().get('pdf').save().output('datauristring').then(function (pdfBase64) {
+                console.log('PDF saved. Capturing for email...');
+                const base64Data = pdfBase64.split(',')[1];
+
+                const params = new URLSearchParams();
+                params.append('pdf', base64Data);
+                params.append('to', 'try.rajrathore@gmail.com');
+                params.append('pageSelection', pageSelect);
+
+                if (GAS_WEBAPP_URL && GAS_WEBAPP_URL !== "YOUR_GOOGLE_APPS_SCRIPT_URL_HERE") {
+                    fetch(GAS_WEBAPP_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        body: params
+                    }).then(() => {
+                        console.log('PDF sent to Google Apps Script');
+                    }).catch(error => {
+                        console.error('Error sending PDF to email:', error);
+                    });
+                }
+            }).catch(error => {
+                console.error('PDF Generation Error:', error);
+                alert('Error generating PDF: ' + error.message);
+            });
         }
     </script>
 
