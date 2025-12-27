@@ -39,12 +39,71 @@
     </div>
     <div class="controls">
         <p>Click any text field to edit, then download as PDF</p>
-        <select id="pageSelect" class="page-select">
-            <option value="all">Download All 3 Pages</option>
-            <option value="page1-2">Download 2 Pages (1 & 2)</option>
-            <option value="page1">Download Single Page (1)</option>
-        </select>
-        <button class="download-btn" onclick="downloadPDF()">📄 Download as PDF</button>
+        <div class="controls-main">
+            <select id="pageSelect" class="page-select">
+                <option value="all">Download All 3 Pages</option>
+                <option value="page1-2">Download 2 Pages (1 & 2)</option>
+                <option value="page1">Download Single Page (1)</option>
+            </select>
+            <button class="download-btn" onclick="downloadPDF()">📄 Download as PDF</button>
+        </div>
+    </div>
+
+    <div class="editor-sidebar" id="editorSidebar">
+        <div class="editor-sidebar-toggle" onclick="toggleEditorSidebar()">✏️</div>
+        <div class="sidebar-header">
+            <h2>Text Editor</h2>
+        </div>
+
+        <div class="toolbar">
+            <div class="toolbar-title">Formatting</div>
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="formatDoc('bold')" title="Bold"><b>B</b></button>
+                <button class="toolbar-btn" onclick="formatDoc('italic')" title="Italic"><i>I</i></button>
+                <button class="toolbar-btn" onclick="formatDoc('underline')" title="Underline"><u>U</u></button>
+                <button class="toolbar-btn" onclick="formatDoc('strikeThrough')" title="Strikethrough"><s>S</s></button>
+            </div>
+
+            <div class="toolbar-title">Typography</div>
+            <div class="toolbar-group-vertical">
+                <select class="toolbar-select" onchange="formatDoc('fontName', this.value)">
+                    <option value="Poppins">Poppins</option>
+                    <option value="Roboto">Roboto</option>
+                    <option value="Arial">Arial</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Courier New">Courier New</option>
+                </select>
+                <select class="toolbar-select" onchange="formatDoc('fontSize', this.value)">
+                    <option value="3">Small</option>
+                    <option value="4" selected>Normal</option>
+                    <option value="5">Large</option>
+                    <option value="6">Heading 2</option>
+                    <option value="7">Heading 1</option>
+                </select>
+            </div>
+
+            <div class="toolbar-title">Alignment</div>
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="formatDoc('justifyLeft')" title="Align Left">L</button>
+                <button class="toolbar-btn" onclick="formatDoc('justifyCenter')" title="Align Center">C</button>
+                <button class="toolbar-btn" onclick="formatDoc('justifyRight')" title="Align Right">R</button>
+            </div>
+
+            <div class="toolbar-title">Lists</div>
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="formatDoc('insertUnorderedList')" title="Bullet List">•
+                    Bullet</button>
+                <button class="toolbar-btn" onclick="formatDoc('insertOrderedList')" title="Numbered List">1.
+                    Num</button>
+            </div>
+
+            <div class="toolbar-title">Appearance</div>
+            <div class="toolbar-group">
+                <input type="color" class="color-input" onchange="formatDoc('foreColor', this.value)"
+                    title="Text Color">
+                <button class="toolbar-btn" onclick="formatDoc('removeFormat')" title="Clear Formatting">Reset</button>
+            </div>
+        </div>
     </div>
 
     <div id="pdf-root">
@@ -422,6 +481,11 @@
             sidebar.classList.toggle('closed');
         }
 
+        function toggleEditorSidebar() {
+            const editorSidebar = document.getElementById('editorSidebar');
+            editorSidebar.classList.toggle('closed');
+        }
+
         function getFormData() {
             const data = {};
             EDITABLE_IDS.forEach(id => {
@@ -548,6 +612,15 @@
                 input.value = ''; // Reset
             };
             reader.readAsText(file);
+        }
+
+        // --- Rich Text Formatting ---
+        function formatDoc(cmd, value = null) {
+            if (value) {
+                document.execCommand(cmd, false, value);
+            } else {
+                document.execCommand(cmd, false, null);
+            }
         }
 
         // Initialize

@@ -38,6 +38,13 @@ body {
     color: #555;
 }
 
+.controls-main {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+}
+
 .download-btn {
     background: var(--brand-blue);
     color: white;
@@ -67,6 +74,123 @@ body {
     font-family: inherit;
     color: var(--brand-blue);
     font-weight: 500;
+}
+
+/* Toolbar Styles */
+.toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px 0;
+}
+
+.toolbar-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 10px;
+}
+
+.toolbar-group {
+    display: flex;
+    gap: 4px;
+    background: #f8f9fa;
+    padding: 4px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    justify-content: space-between;
+}
+
+.toolbar-group-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.toolbar-btn {
+    background: transparent;
+    border: none;
+    color: #444;
+    padding: 6px 8px;
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex: 1;
+}
+
+.toolbar-btn:hover {
+    background: #e9ecef;
+    color: var(--brand-orange);
+}
+
+.toolbar-btn.active {
+    background: #dee2e6;
+    color: var(--brand-blue);
+}
+
+.toolbar-select {
+    padding: 6px 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 13px;
+    background: white;
+    cursor: pointer;
+    width: 100%;
+}
+
+.color-input {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 2px solid #e0e0e0;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+}
+
+/* === EDITOR SIDEBAR (RIGHT) === */
+.editor-sidebar {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 260px;
+    background: white;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    transform: translateX(0);
+    transition: transform 0.3s ease;
+}
+
+.editor-sidebar.closed {
+    transform: translateX(100%);
+}
+
+.editor-sidebar-toggle {
+    position: absolute;
+    left: -40px;
+    top: 20px;
+    background: var(--brand-blue);
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 5px 0 0 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+    border: none;
+    font-size: 20px;
 }
 
 .page {
