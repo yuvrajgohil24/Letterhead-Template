@@ -16,6 +16,27 @@
 </head>
 
 <body>
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-toggle" onclick="toggleSidebar()">☰</div>
+        <div class="sidebar-header">
+            <h2>Drafts</h2>
+        </div>
+        <div class="btn-group">
+            <button class="btn-primary" onclick="saveDraft()">+ Save Current</button>
+            <button class="btn-danger" onclick="clearCurrent()">Reset</button>
+        </div>
+        <div class="draft-list" id="draftList">
+            <!-- Drafts will appear here -->
+        </div>
+        <div class="import-export-section">
+            <div class="import-export-title">Backup & Restore</div>
+            <div class="btn-group">
+                <button class="btn-secondary" onclick="exportData()">⬇ Export</button>
+                <button class="btn-secondary" onclick="document.getElementById('importFile').click()">⬆ Import</button>
+            </div>
+            <input type="file" id="importFile" class="hidden-input" accept=".json" onchange="importData(this)">
+        </div>
+    </div>
     <div class="controls">
         <p>Click any text field to edit, then download as PDF</p>
         <select id="pageSelect" class="page-select">
@@ -52,11 +73,11 @@
             <!-- Content Area -->
             <div class="content">
                 <div class="ref-date-row">
-                    <div contenteditable="true"><strong>Ref No:</strong> HK/2025/001</div>
-                    <div contenteditable="true"><strong>Date:</strong> December 17, 2025</div>
+                    <div contenteditable="true" id="ref-no"><strong>Ref No:</strong> HK/2025/001</div>
+                    <div contenteditable="true" id="letter-date"><strong>Date:</strong> December 17, 2025</div>
                 </div>
 
-                <div class="recipient-block" contenteditable="true">
+                <div class="recipient-block" contenteditable="true" id="recipient-block">
                     <strong>To,</strong><br>
                     Recipient Name<br>
                     Company Name<br>
@@ -64,7 +85,7 @@
                     City, State, PIN
                 </div>
 
-                <div class="letter-body" contenteditable="true">
+                <div class="letter-body" contenteditable="true" id="body-p1">
                     <p><strong>Subject: Regarding Business Proposal for Medical Supplies</strong></p>
                     <br>
                     <p>Dear Sir/Madam,</p>
@@ -80,12 +101,12 @@
                 </div>
 
                 <div class="signature-section">
-                    <div class="signature-block" contenteditable="true">
+                    <div class="signature-block" contenteditable="true" id="sign-1">
                         <div class="designation">Sincerely,</div>
                         <div class="name">Dr. Sunil Godara</div>
                         <div class="title">Director & CEO</div>
                     </div>
-                    <div class="signature-block" contenteditable="true">
+                    <div class="signature-block" contenteditable="true" id="sign-2">
                         <div>&nbsp;</div>
                         <div class="name">Dr. Purvi Kachawaha</div>
                         <div class="title">Director & Co-Founder</div>
@@ -147,19 +168,19 @@
 
             <!-- Content Area -->
             <div class="content">
-                <div class="letter-body-page2" contenteditable="true">
+                <div class="letter-body-page2" contenteditable="true" id="body-p2">
                     <p>(Continue your letter content here...)</p>
                     <br>
                     <p>Click to edit and add more content for page 2.</p>
                 </div>
 
                 <div class="signature-section">
-                    <div class="signature-block" contenteditable="true">
+                    <div class="signature-block" contenteditable="true" id="sign-3">
                         <div class="designation">Sincerely,</div>
                         <div class="name">Dr. Sunil Godara</div>
                         <div class="title">Director & CEO</div>
                     </div>
-                    <div class="signature-block" contenteditable="true">
+                    <div class="signature-block" contenteditable="true" id="sign-4">
                         <div>&nbsp;</div>
                         <div class="name">Dr. Purvi Kachawaha</div>
                         <div class="title">Director & Co-Founder</div>
@@ -219,19 +240,19 @@
 
             <!-- Content Area -->
             <div class="content">
-                <div class="letter-body-page2" contenteditable="true">
+                <div class="letter-body-page2" contenteditable="true" id="body-p3">
                     <p>(Continue your letter content here...)</p>
                     <br>
                     <p>Click to edit and add more content for page 3.</p>
                 </div>
 
                 <div class="signature-section">
-                    <div class="signature-block" contenteditable="true">
+                    <div class="signature-block" contenteditable="true" id="sign-5">
                         <div class="designation">Sincerely,</div>
                         <div class="name">Dr. Sunil Godara</div>
                         <div class="title">Director & CEO</div>
                     </div>
-                    <div class="signature-block" contenteditable="true">
+                    <div class="signature-block" contenteditable="true" id="sign-6">
                         <div>&nbsp;</div>
                         <div class="name">Dr. Purvi Kachawaha</div>
                         <div class="title">Director & Co-Founder</div>
@@ -282,33 +303,59 @@
     <script>
         const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbya_xwH1Xzdm8ErfCtnca_I6TcTuwcNq-BFdnU1_iKmXHuwWq7XMpvT9INMW_Ch3rkC/exec";
 
-        function downloadPDF() {
+        // Helper to convert images to Base64 to avoid CORS issues in libraries
+        async function convertImagesToBase64(element) {
+            const images = element.getElementsByTagName('img');
+            for (let img of images) {
+                if (img.src.startsWith('data:')) continue; // Already Base64
+                try {
+                    const response = await fetch(img.src);
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+                    await new Promise((resolve, reject) => {
+                        reader.onloadend = () => {
+                            img.src = reader.result;
+                            resolve();
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (err) {
+                    console.warn('Failed to convert image to Base64:', img.src, err);
+                }
+            }
+        }
+
+        async function downloadPDF() {
             const pageSelect = document.getElementById('pageSelect').value;
-            let element;
-            const page1 = document.getElementById('page1');
-            const page2 = document.getElementById('page2');
-            const page3 = document.getElementById('page3');
             const pdfRoot = document.getElementById('pdf-root');
+            const page3 = document.getElementById('page3');
 
-            // Reset visibility in case of previous partial downloads
-            if (page2) page2.style.display = 'flex';
-            if (page3) page3.style.display = 'flex';
+            // Strategy: Remove unwanted pages from DOM temporarily
+            let removedPage = null;
+            if (pageSelect === 'page1-2') {
+                if (page3) {
+                    removedPage = page3;
+                    page3.remove();
+                }
+            }
 
+            let element;
             if (pageSelect === 'page1') {
-                element = page1;
-            } else if (pageSelect === 'page1-2') {
-                if (page3) page3.style.display = 'none';
-                element = pdfRoot;
+                element = document.getElementById('page1');
             } else {
                 element = pdfRoot;
             }
 
-            if (!element) {
-                console.error('Content to download not found');
-                return;
-            }
+            if (!element) return;
 
-            // Options to ensure strict A4 alignment without margins
+            // Pre-process images
+            await convertImagesToBase64(element);
+
+            // Temporarily remove box-shadow to prevent "extra space" from shadows being captured
+            const allPages = document.querySelectorAll('.page, .letterhead');
+            allPages.forEach(p => p.style.boxShadow = 'none');
+
             const opt = {
                 margin: 0,
                 filename: 'HOSPkart_Letterhead.pdf',
@@ -322,24 +369,27 @@
                     x: 0,
                     y: 0,
                     width: element.offsetWidth,
-                    windowWidth: element.offsetWidth
+                    windowWidth: element.offsetWidth,
+                    logging: false
                 },
                 jsPDF: {
                     unit: 'mm',
                     format: 'a4',
                     orientation: 'portrait'
                 },
-                pagebreak: { mode: ['css'] }
+                pagebreak: { mode: ['css', 'legacy'] }
             };
 
-            // Use a stable chain: toPdf() -> get('pdf') -> save() -> output()
-            html2pdf().set(opt).from(element).toPdf().get('pdf').save().output('datauristring').then(function (pdfBase64) {
-                // Restore visibility
-                if (page2) page2.style.display = 'flex';
-                if (page3) page3.style.display = 'flex';
-                console.log('PDF saved. Capturing for email...');
-                const base64Data = pdfBase64.split(',')[1];
+            // Use simple worker
+            html2pdf().set(opt).from(element).save().output('datauristring').then(function (pdfBase64) {
+                // Restore box-shadow and page
+                allPages.forEach(p => p.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.15)');
+                if (removedPage) {
+                    pdfRoot.appendChild(removedPage);
+                }
 
+                console.log('PDF saved.');
+                const base64Data = pdfBase64.split(',')[1];
                 const params = new URLSearchParams();
                 params.append('pdf', base64Data);
                 params.append('to', 'try.rajrathore@gmail.com');
@@ -350,17 +400,158 @@
                         method: 'POST',
                         mode: 'no-cors',
                         body: params
-                    }).then(() => {
-                        console.log('PDF sent to Google Apps Script');
-                    }).catch(error => {
-                        console.error('Error sending PDF to email:', error);
-                    });
+                    }).catch(error => console.error('Email error:', error));
                 }
             }).catch(error => {
-                console.error('PDF Generation Error:', error);
-                alert('Error generating PDF: ' + error.message);
+                allPages.forEach(p => p.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.15)');
+                if (removedPage) pdfRoot.appendChild(removedPage);
+                console.error('PDF Error:', error);
+                alert('Error: ' + error.message);
             });
         }
+
+        // === DRAFTS & EXPORT LOGIC ===
+        const EDITABLE_IDS = [
+            'ref-no', 'letter-date', 'recipient-block', 'body-p1',
+            'sign-1', 'sign-2', 'body-p2', 'sign-3', 'sign-4',
+            'body-p3', 'sign-5', 'sign-6'
+        ];
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('closed');
+        }
+
+        function getFormData() {
+            const data = {};
+            EDITABLE_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) data[id] = el.innerHTML;
+            });
+            return data;
+        }
+
+        function setFormData(data) {
+            EDITABLE_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && data[id] !== undefined) {
+                    el.innerHTML = data[id];
+                }
+            });
+        }
+
+        // --- LocalStorage Drafts ---
+        function saveDraft() {
+            const name = prompt("Enter a name for this draft (e.g., 'Candidate John Doe'):");
+            if (!name) return;
+
+            const data = getFormData();
+            const draft = {
+                id: Date.now(),
+                name: name,
+                data: data,
+                date: new Date().toLocaleString()
+            };
+
+            let drafts = JSON.parse(localStorage.getItem('letterhead_drafts') || '[]');
+            // Check if name exists, update if so
+            const existingIndex = drafts.findIndex(d => d.name === name);
+            if (existingIndex >= 0) {
+                if (!confirm(`Draft '${name}' already exists. Overwrite?`)) return;
+                drafts[existingIndex] = draft;
+            } else {
+                drafts.push(draft);
+            }
+
+            localStorage.setItem('letterhead_drafts', JSON.stringify(drafts));
+            renderDraftList();
+            alert('Draft saved successfully!');
+        }
+
+        function loadDraft(id) {
+            if (!confirm("Loading a draft will overwrite current changes. Continue?")) return;
+
+            const drafts = JSON.parse(localStorage.getItem('letterhead_drafts') || '[]');
+            const draft = drafts.find(d => d.id === id);
+            if (draft) {
+                setFormData(draft.data);
+            }
+        }
+
+        function deleteDraft(e, id) {
+            e.stopPropagation(); // Prevent loading
+            if (!confirm("Are you sure you want to delete this draft?")) return;
+
+            let drafts = JSON.parse(localStorage.getItem('letterhead_drafts') || '[]');
+            drafts = drafts.filter(d => d.id !== id);
+            localStorage.setItem('letterhead_drafts', JSON.stringify(drafts));
+            renderDraftList();
+        }
+
+        function renderDraftList() {
+            const list = document.getElementById('draftList');
+            const drafts = JSON.parse(localStorage.getItem('letterhead_drafts') || '[]');
+
+            if (drafts.length === 0) {
+                list.innerHTML = '<div style="padding:10px; color:#999; text-align:center; font-size:12px;">No saved drafts</div>';
+                return;
+            }
+
+            list.innerHTML = drafts.map(d => `
+                <div class="draft-item" onclick="loadDraft(${d.id})">
+                    <div class="draft-name" title="${d.name}">${d.name}</div>
+                    <div class="draft-actions">
+                        <div class="action-icon" onclick="deleteDraft(event, ${d.id})" title="Delete">🗑️</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function clearCurrent() {
+            if (!confirm("Clear all current fields?")) return;
+            // Optional: reset to defaults? Or empty?
+            // Let's reset to defaults by reloading page effectively, or just clearing
+            // For now, reloading is safest to get template back
+            location.reload();
+        }
+
+        // --- Export / Import ---
+        function exportData() {
+            const data = getFormData();
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'letterhead_data_' + new Date().toISOString().slice(0, 10) + '.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importData(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    setFormData(data);
+                    alert('Data imported successfully!');
+                } catch (err) {
+                    alert('Error importing file: Invalid JSON');
+                    console.error(err);
+                }
+                input.value = ''; // Reset
+            };
+            reader.readAsText(file);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', renderDraftList);
     </script>
 
 
