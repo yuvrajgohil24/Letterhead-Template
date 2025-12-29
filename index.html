@@ -13,6 +13,7 @@
         rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <link rel="icon" type="image/png" href="favicon.png">
+
 </head>
 
 <body>
@@ -52,18 +53,11 @@
     <div class="editor-sidebar" id="editorSidebar">
         <div class="editor-sidebar-toggle" onclick="toggleEditorSidebar()">✏️</div>
         <div class="sidebar-header">
-            <h2>Text Editor</h2>
+            <h2>Text Options</h2>
+            <button class="btn-close" onclick="toggleEditorSidebar()">×</button>
         </div>
 
         <div class="toolbar">
-            <div class="toolbar-title">Formatting</div>
-            <div class="toolbar-group">
-                <button class="toolbar-btn" onclick="formatDoc('bold')" title="Bold"><b>B</b></button>
-                <button class="toolbar-btn" onclick="formatDoc('italic')" title="Italic"><i>I</i></button>
-                <button class="toolbar-btn" onclick="formatDoc('underline')" title="Underline"><u>U</u></button>
-                <button class="toolbar-btn" onclick="formatDoc('strikeThrough')" title="Strikethrough"><s>S</s></button>
-            </div>
-
             <div class="toolbar-title">Typography</div>
             <div class="toolbar-group-vertical">
                 <select class="toolbar-select" onchange="formatDoc('fontName', this.value)">
@@ -74,34 +68,59 @@
                     <option value="Courier New">Courier New</option>
                 </select>
                 <select class="toolbar-select" onchange="formatDoc('fontSize', this.value)">
-                    <option value="3">Small</option>
-                    <option value="4" selected>Normal</option>
-                    <option value="5">Large</option>
-                    <option value="6">Heading 2</option>
-                    <option value="7">Heading 1</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                    <option value="11">11</option>
+                    <option value="12">12</option>
+                    <option value="13">13</option>
+                    <option value="14" selected>14</option>
+                    <option value="16">16</option>
+                    <option value="18">18</option>
+                    <option value="20">20</option>
+                    <option value="24">24</option>
+                    <option value="28">28</option>
+                    <option value="32">32</option>
+                    <option value="36">36</option>
+                    <option value="48">48</option>
                 </select>
+            </div>
+
+            <div class="toolbar-title">Styling</div>
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="formatDoc('bold')" onmousedown="event.preventDefault()"
+                    title="Bold"><b>B</b></button>
+                <button class="toolbar-btn" onclick="formatDoc('italic')" onmousedown="event.preventDefault()"
+                    title="Italic"><i>I</i></button>
+                <button class="toolbar-btn" onclick="formatDoc('underline')" onmousedown="event.preventDefault()"
+                    title="Underline"><u>U</u></button>
+                <button class="toolbar-btn" onclick="formatDoc('strikeThrough')" onmousedown="event.preventDefault()"
+                    title="Strike"><s>S</s></button>
             </div>
 
             <div class="toolbar-title">Alignment</div>
             <div class="toolbar-group">
-                <button class="toolbar-btn" onclick="formatDoc('justifyLeft')" title="Align Left">L</button>
-                <button class="toolbar-btn" onclick="formatDoc('justifyCenter')" title="Align Center">C</button>
-                <button class="toolbar-btn" onclick="formatDoc('justifyRight')" title="Align Right">R</button>
+                <button class="toolbar-btn" onclick="formatDoc('justifyLeft')" onmousedown="event.preventDefault()"
+                    title="Left">L</button>
+                <button class="toolbar-btn" onclick="formatDoc('justifyCenter')" onmousedown="event.preventDefault()"
+                    title="Center">C</button>
+                <button class="toolbar-btn" onclick="formatDoc('justifyRight')" onmousedown="event.preventDefault()"
+                    title="Right">R</button>
             </div>
 
             <div class="toolbar-title">Lists</div>
             <div class="toolbar-group">
-                <button class="toolbar-btn" onclick="formatDoc('insertUnorderedList')" title="Bullet List">•
-                    Bullet</button>
-                <button class="toolbar-btn" onclick="formatDoc('insertOrderedList')" title="Numbered List">1.
-                    Num</button>
+                <button class="toolbar-btn" onclick="formatDoc('insertUnorderedList')"
+                    onmousedown="event.preventDefault()" title="Bullets">•</button>
+                <button class="toolbar-btn" onclick="formatDoc('insertOrderedList')"
+                    onmousedown="event.preventDefault()" title="Numbered">1.</button>
             </div>
 
             <div class="toolbar-title">Appearance</div>
             <div class="toolbar-group">
-                <input type="color" class="color-input" onchange="formatDoc('foreColor', this.value)"
-                    title="Text Color">
-                <button class="toolbar-btn" onclick="formatDoc('removeFormat')" title="Clear Formatting">Reset</button>
+                <input type="color" class="color-input" onchange="formatDoc('foreColor', this.value)" title="Color">
+                <button class="toolbar-btn" onclick="formatDoc('removeFormat')" onmousedown="event.preventDefault()"
+                    title="Reset">Clear</button>
             </div>
         </div>
     </div>
@@ -614,17 +633,78 @@
             reader.readAsText(file);
         }
 
-        // --- Rich Text Formatting ---
-        function formatDoc(cmd, value = null) {
-            if (value) {
-                document.execCommand(cmd, false, value);
-            } else {
-                document.execCommand(cmd, false, null);
+        // --- Selection & Formatting Persistence ---
+        let lastSelection = null;
+
+        function saveSelection() {
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0) {
+                lastSelection = sel.getRangeAt(0);
             }
         }
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', renderDraftList);
+        function restoreSelection() {
+            if (lastSelection) {
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(lastSelection);
+            }
+        }
+
+        // Keep track of selection whenever it changes in the document
+        document.addEventListener('selectionchange', () => {
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0) {
+                let node = sel.anchorNode;
+                while (node && node !== document.body) {
+                    if (node.nodeType === 1 && node.hasAttribute('contenteditable')) {
+                        saveSelection();
+                        break;
+                    }
+                    node = node.parentNode;
+                }
+            }
+        });
+
+        // Main formatting function
+        function formatDoc(cmd, value = null) {
+            restoreSelection(); // Ensure formatting is applied to the correct spot
+
+            if (cmd === 'fontSize' && value && !isNaN(value)) {
+                // For numeric font sizes (pixels), we use a helper trick
+                document.execCommand('fontSize', false, '7');
+                const fontElems = document.querySelectorAll('font[size="7"]');
+                fontElems.forEach(el => {
+                    el.removeAttribute('size');
+                    el.style.fontSize = value + 'px';
+                });
+            } else {
+                if (value) {
+                    document.execCommand(cmd, false, value);
+                } else {
+                    document.execCommand(cmd, false, null);
+                }
+            }
+        }
+
+        // Auto-open sidebar on section click
+        function initAutoSidebar() {
+            const editables = document.querySelectorAll('[contenteditable="true"]');
+            editables.forEach(el => {
+                el.addEventListener('click', () => {
+                    const sidebar = document.getElementById('editorSidebar');
+                    if (sidebar.classList.contains('closed')) {
+                        toggleEditorSidebar();
+                    }
+                });
+            });
+        }
+
+        // Initialize everything
+        document.addEventListener('DOMContentLoaded', () => {
+            renderDraftList();
+            initAutoSidebar();
+        });
     </script>
 
 
