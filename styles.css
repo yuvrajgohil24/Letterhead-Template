@@ -13,7 +13,7 @@
 
 body {
     font-family: 'Poppins', sans-serif;
-    background: #e0e0e0;
+    background: #bbb;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -171,17 +171,41 @@ body {
     transition: transform 0.3s ease;
 }
 
+.editor-sidebar-toggle {
+    position: absolute;
+    left: -40px;
+    top: 15px;
+    background: var(--brand-orange);
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 5px 0 0 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+    font-size: 18px;
+    z-index: 1001;
+    transition: background 0.2s;
+}
+
+.editor-sidebar-toggle:hover {
+    background: var(--brand-blue);
+}
+
 .editor-sidebar .sidebar-header {
-    padding: 15px 20px;
+    padding: 12px 15px;
     background: #f8f9fa;
     border-bottom: 1px solid #eee;
     display: flex;
+    flex-direction: row;
     justify-content: space-between;
     align-items: center;
 }
 
 .editor-sidebar .sidebar-header h2 {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--brand-blue);
     text-transform: uppercase;
@@ -192,17 +216,20 @@ body {
 .btn-close {
     background: none;
     border: none;
-    font-size: 24px;
+    font-size: 22px;
     cursor: pointer;
     color: #999;
+    line-height: 1;
+    padding: 0;
 }
 
 .btn-close:hover {
     color: var(--brand-orange);
 }
 
+
 /* Toolbar Styles */
-.toolbar {
+.editor-sidebar .toolbar {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -210,7 +237,7 @@ body {
     overflow-y: auto;
 }
 
-.toolbar-title {
+.editor-sidebar .toolbar-title {
     font-size: 11px;
     font-weight: 700;
     color: #999;
@@ -219,7 +246,7 @@ body {
     margin-top: 5px;
 }
 
-.toolbar-group {
+.editor-sidebar .toolbar-group {
     display: flex;
     gap: 5px;
     background: #f8f9fa;
@@ -235,7 +262,7 @@ body {
     gap: 8px;
 }
 
-.toolbar-btn {
+.editor-sidebar .toolbar-btn {
     background: white;
     border: 1px solid #e0e0e0;
     color: #444;
@@ -250,13 +277,13 @@ body {
     min-width: 35px;
 }
 
-.toolbar-btn:hover {
+.editor-sidebar .toolbar-btn:hover {
     background: #fff5f0;
     color: var(--brand-orange);
     border-color: var(--brand-orange);
 }
 
-.toolbar-select {
+.editor-sidebar .toolbar-select {
     padding: 8px;
     border: 1px solid #e0e0e0;
     border-radius: 4px;
@@ -279,6 +306,7 @@ body {
 .editor-sidebar.closed {
     transform: translateX(100%);
 }
+
 
 .page {
     width: 210mm;
@@ -313,11 +341,12 @@ body {
     /* Slightly less than 297mm to prevent blank page overflow */
     background: white;
     /* box-shadow: 0 0 20px rgba(0, 0, 0, 0.15); REMOVED shadow for cleaner capture if needed, or keep for UI */
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+    border: 1px solid #ddd;
     position: relative;
     display: flex;
     flex-direction: column;
-    margin: 0;
+    margin: 0 0 40px 0;
     /* Override any auto margin inside the capture root */
     /* page-break-after: always; REMOVED to prevent double breaking */
 }
@@ -480,6 +509,15 @@ body {
     font-size: 14px;
     line-height: 1.7;
     color: var(--text-dark);
+}
+
+/* Adjust padding for pages without headers/footers */
+#pdf-root .page:not(:first-child) .content {
+    padding-top: 60px;
+}
+
+#pdf-root .page:not(:last-child) .content {
+    padding-bottom: 60px;
 }
 
 .content [contenteditable="true"] {
@@ -830,4 +868,162 @@ body {
 
 .hidden-input {
     display: none;
+}
+
+/* === AUTO-SAVE TOAST === */
+.autosave-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--brand-blue);
+    color: white;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.autosave-toast.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* === PAGE NUMBER LABEL === */
+.page-number {
+    text-align: center;
+    font-size: 10px;
+    color: #999;
+    padding: 4px 0;
+    font-family: 'Poppins', sans-serif;
+    position: absolute;
+    bottom: 2px;
+    width: 100%;
+}
+
+/* === INSERTED IMAGES === */
+.content img,
+.blank-page-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 8px 0;
+    cursor: default;
+}
+
+/* === INSERTED TABLES === */
+.content table,
+.blank-page-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 13px;
+}
+
+.content table th,
+.blank-page-content table th {
+    background: var(--brand-blue);
+    color: white;
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+}
+
+.content table td,
+.blank-page-content table td {
+    border: 1px solid #ddd;
+    padding: 6px 12px;
+}
+
+.content table tr:nth-child(even) td,
+.blank-page-content table tr:nth-child(even) td {
+    background: #f9f9f9;
+}
+
+/* === AUTOSAVE RESTORE BANNER === */
+.restore-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, var(--brand-blue), #2a3d6e);
+    color: white;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    z-index: 10000;
+    font-size: 13px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.restore-banner button {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.restore-banner .btn-restore {
+    background: var(--brand-orange);
+    color: white;
+}
+
+.restore-banner .btn-dismiss {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* === MOBILE RESPONSIVE === */
+@media (max-width: 900px) {
+    body {
+        gap: 15px;
+        padding: 10px;
+    }
+
+    #pdf-root {
+        transform: scale(0.5);
+        transform-origin: top center;
+        margin-bottom: -50%;
+    }
+
+    .controls {
+        padding: 10px 15px;
+        border-radius: 8px;
+    }
+
+    .controls-main {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .controls p {
+        font-size: 12px;
+    }
+
+    .sidebar {
+        width: 220px;
+    }
+
+    .editor-sidebar {
+        width: 200px;
+    }
+}
+
+@media (max-width: 600px) {
+    #pdf-root {
+        transform: scale(0.35);
+        margin-bottom: -65%;
+    }
+
+    .sidebar {
+        width: 200px;
+    }
 }
