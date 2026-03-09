@@ -311,19 +311,25 @@ body {
 .page {
     width: 210mm;
     height: 297mm;
-    /* FIX */
     background: #ffffff;
     position: relative;
     overflow: hidden;
-    /* IMPORTANT */
+    /* Prevent page stretching */
 }
 
 
-/* ONLY break before page 2 */
+
+/* Page Break Logic */
+.page {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
 .page-break {
-    break-before: page;
-    page-break-before: always;
+    page-break-after: always;
+    break-after: page;
 }
+
 
 
 
@@ -338,23 +344,66 @@ body {
 .letterhead {
     width: 210mm;
     height: 296.8mm;
-    /* Slightly less than 297mm to prevent blank page overflow */
     background: white;
-    /* box-shadow: 0 0 20px rgba(0, 0, 0, 0.15); REMOVED shadow for cleaner capture if needed, or keep for UI */
     box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
-    border: 1px solid #ddd;
+    outline: 1px solid #ddd;
+    /* outline instead of border so it doesn't eat into content */
     position: relative;
     display: flex;
     flex-direction: column;
     margin: 0 0 40px 0;
-    /* Override any auto margin inside the capture root */
-    /* page-break-after: always; REMOVED to prevent double breaking */
+    overflow: hidden;
+    padding: 0;
 }
+
+
+
+/* Capture Mode for PDF Generation - Only remove external decorations */
+.pdf-capture-mode .page,
+.pdf-capture-mode .letterhead {
+    box-sizing: border-box !important;
+    box-shadow: none !important;
+    border: none !important;
+    outline: none !important;
+    margin: 0 !important;
+    width: 210mm !important;
+    height: 295mm !important;
+    /* Safety margin: 295mm instead of 297mm */
+    overflow: hidden !important;
+}
+
+/* Force PDF engine to break pages exactly here */
+.page-break {
+    page-break-before: always !important;
+    break-before: page !important;
+}
+
+.pdf-capture-mode .page-number,
+.pdf-capture-mode button {
+    display: none !important;
+}
+
+.pdf-capture-mode #pdf-root {
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Lock content during PDF capture - prevent scrollable overflow from elongating pages */
+.pdf-capture-mode .letter-body,
+.pdf-capture-mode .letter-body-page2,
+.pdf-capture-mode .blank-page-content,
+.pdf-capture-mode [contenteditable="true"] {
+    overflow: hidden !important;
+}
+
 
 
 /* HEADER CONTAINER */
 .letterhead-header {
-    margin-top: 30px;
+    margin: 10px 0 0 0;
+    /* small top margin, no left/right margin */
+    padding: 0;
     width: 100%;
     display: flex;
     position: relative;
@@ -362,8 +411,8 @@ body {
     overflow: hidden;
     flex-shrink: 0;
     height: 120px;
-    /* Fixed height for consistency */
 }
+
 
 /* NEW CUSTOM DESIGN FROM IMAGE */
 .custom-design {
@@ -548,14 +597,23 @@ body {
 }
 
 .letter-body {
-    min-height: 280px;
-    margin-bottom: 30px;
+    max-height: 520px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    /* Hide scrollbar, let JS handle pagination */
 }
 
 .letter-body-page2 {
-    /* background-color: red; */
-    min-height: 450px;
+    max-height: 800px;
+    overflow: hidden;
 }
+
+.blank-page-content {
+    max-height: 800px;
+    overflow: hidden;
+}
+
+
 
 .signature-section {
     position: relative;

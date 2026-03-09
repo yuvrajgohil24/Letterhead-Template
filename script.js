@@ -36,68 +36,80 @@ function updateAnnexureStatus() {
     }
 }
 
-// ===================== DOWNLOAD PDF =====================
+// ===================== DOWNLOAD PDF - FIXED =====================
 async function downloadPDF() {
     const pageSelect = document.getElementById('pageSelect').value;
     const pdfRoot = document.getElementById('pdf-root');
-    const page3 = document.getElementById('page3');
     const annexureInput = document.getElementById('annexureInput');
 
-    let removedPage = null;
-    if (pageSelect === 'page1-2') {
-        if (page3) {
-            removedPage = page3;
-            page3.remove();
-        }
-    }
+    // Determine which pages to capture
+    const allPages = Array.from(document.querySelectorAll('#pdf-root > .page'));
+    let pagesToCapture = [];
 
-    let element;
     if (pageSelect === 'page1') {
-        element = document.getElementById('page1');
+        pagesToCapture = [allPages[0]];
     } else {
-        element = pdfRoot;
+        pagesToCapture = allPages;
     }
 
-    if (!element) return;
+    // Add capture mode
+    pdfRoot.classList.add('pdf-capture-mode');
+    await convertImagesToBase64(pdfRoot);
 
-    await convertImagesToBase64(element);
+    // Scroll to top and wait
+    window.scrollTo(0, 0);
+    await new Promise(r => setTimeout(r, 150));
 
-    const allPages = document.querySelectorAll('.page, .letterhead');
-    allPages.forEach(p => {
-        p.style.boxShadow = 'none';
-        p.style.border = 'none';
-        p.style.margin = '0';
-    });
+    try {
+        const { PDFDocument } = PDFLib;
+        const finalDoc = await PDFDocument.create();
 
-    // Hide page numbers during PDF generation
-    document.querySelectorAll('.page-number').forEach(pn => pn.style.display = 'none');
+        // A4 in points: 595 x 842 pt  (1mm = 2.8346pt)
+        const A4_W_PT = 595.28;
+        const A4_H_PT = 841.89;
 
-    const opt = {
-        margin: 0,
-        filename: 'HOSPkart_Letterhead.pdf',
-        image: { type: 'jpeg', quality: 1.0 },
-        html2canvas: {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: '#ffffff',
-            scrollX: 0,
-            scrollY: 0,
-            x: 0,
-            y: 0,
-            width: element.offsetWidth,
-            windowWidth: element.offsetWidth,
-            logging: false
-        },
-        jsPDF: {
-            unit: 'mm',
-            format: 'a4',
-            orientation: 'portrait'
-        },
-        pagebreak: { mode: ['css', 'legacy'] }
-    };
+        for (let i = 0; i < pagesToCapture.length; i++) {
+            const pageEl = pagesToCapture[i];
+            if (!pageEl) continue;
 
-    html2pdf().set(opt).from(element).output('arraybuffer').then(async function (pdfBuffer) {
-        let finalPdfBytes = new Uint8Array(pdfBuffer);
+            // Scroll page into view so html2canvas can see it properly
+            pageEl.scrollIntoView({ behavior: 'instant', block: 'start' });
+            await new Promise(r => setTimeout(r, 100));
+
+            const canvas = await html2canvas(pageEl, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff',
+                width: pageEl.offsetWidth,
+                height: pageEl.offsetHeight,
+                scrollX: 0,
+                scrollY: -window.scrollY,
+                logging: false,
+                onclone: (clonedDoc) => {
+                    // Hide page numbers and buttons in the cloned version
+                    clonedDoc.querySelectorAll('.page-number, button').forEach(el => {
+                        el.style.display = 'none';
+                    });
+                }
+            });
+
+            // Convert canvas → PNG bytes → embed in PDF
+            const imgDataUrl = canvas.toDataURL('image/png');
+            const imgBase64 = imgDataUrl.split(',')[1];
+            const imgBytes = Uint8Array.from(atob(imgBase64), c => c.charCodeAt(0));
+
+            const pngImage = await finalDoc.embedPng(imgBytes);
+            const pdfPage = finalDoc.addPage([A4_W_PT, A4_H_PT]);
+            pdfPage.drawImage(pngImage, {
+                x: 0,
+                y: 0,
+                width: A4_W_PT,
+                height: A4_H_PT
+            });
+        }
+
+        let finalPdfBytes = await finalDoc.save();
 
         // Merge annexure if present
         if (annexureInput.files.length > 0) {
@@ -105,61 +117,46 @@ async function downloadPDF() {
                 const annexureFile = annexureInput.files[0];
                 const annexureBuffer = await annexureFile.arrayBuffer();
 
-                const { PDFDocument } = PDFLib;
                 const mainPdfDoc = await PDFDocument.load(finalPdfBytes);
                 const annexurePdfDoc = await PDFDocument.load(annexureBuffer);
-
                 const mergedPdfDoc = await PDFDocument.create();
 
                 const mainPages = await mergedPdfDoc.copyPages(mainPdfDoc, mainPdfDoc.getPageIndices());
-                mainPages.forEach(page => mergedPdfDoc.addPage(page));
+                mainPages.forEach(p => mergedPdfDoc.addPage(p));
 
                 const annexurePages = await mergedPdfDoc.copyPages(annexurePdfDoc, annexurePdfDoc.getPageIndices());
-                annexurePages.forEach(page => mergedPdfDoc.addPage(page));
+                annexurePages.forEach(p => mergedPdfDoc.addPage(p));
 
                 finalPdfBytes = await mergedPdfDoc.save();
-                console.log('Annexure merged successfully.');
             } catch (mergeErr) {
                 console.error('Merge error:', mergeErr);
-                alert('Error merging Annexure. Downloading letterhead only.');
+                alert('Letterhead generated, but Annexure merge failed.');
             }
         }
 
-        // Trigger download
+        // Download the PDF
         const blob = new Blob([finalPdfBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = opt.filename;
+        a.download = 'HOSPkart_Letterhead.pdf';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        // Restore UI
-        allPages.forEach(p => {
-            p.style.boxShadow = '0 0 15px rgba(0, 0, 0, 0.2)';
-            p.style.border = '1px solid #ddd';
-            p.style.margin = '0 0 40px 0';
-        });
-        document.querySelectorAll('.page-number').forEach(pn => pn.style.display = '');
-        if (removedPage) {
-            pdfRoot.appendChild(removedPage);
-        }
-
-        // Email via GAS
-        let binary = '';
-        const len = finalPdfBytes.byteLength;
-        for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(finalPdfBytes[i]);
-        }
-        const base64Str = btoa(binary);
-        const params = new URLSearchParams();
-        params.append('pdf', base64Str);
-        params.append('to', 'try.rajrathore@gmail.com');
-        params.append('pageSelection', pageSelect);
-
+        // Email via GAS (optional)
         if (GAS_WEBAPP_URL && GAS_WEBAPP_URL !== "YOUR_GOOGLE_APPS_SCRIPT_URL_HERE") {
+            let binary = '';
+            const bytesArray = new Uint8Array(finalPdfBytes);
+            for (let i = 0; i < bytesArray.byteLength; i++) {
+                binary += String.fromCharCode(bytesArray[i]);
+            }
+            const base64Str = btoa(binary);
+            const params = new URLSearchParams();
+            params.append('pdf', base64Str);
+            params.append('to', 'try.rajrathore@gmail.com');
+            params.append('pageSelection', pageSelect);
             fetch(GAS_WEBAPP_URL, {
                 method: 'POST',
                 mode: 'no-cors',
@@ -167,18 +164,15 @@ async function downloadPDF() {
             }).catch(error => console.error('Email error:', error));
         }
 
-    }).catch(error => {
-        allPages.forEach(p => {
-            p.style.boxShadow = '0 0 15px rgba(0, 0, 0, 0.2)';
-            p.style.border = '1px solid #ddd';
-            p.style.margin = '0 0 40px 0';
-        });
-        document.querySelectorAll('.page-number').forEach(pn => pn.style.display = '');
-        if (removedPage) pdfRoot.appendChild(removedPage);
-        console.error('PDF Error:', error);
-        alert('Error: ' + error.message);
-    });
+    } catch (err) {
+        console.error('PDF Error:', err);
+        alert('Error generating PDF: ' + err.message);
+    } finally {
+        pdfRoot.classList.remove('pdf-capture-mode');
+        window.scrollTo(0, 0);
+    }
 }
+
 
 // ===================== DRAFTS & EXPORT LOGIC =====================
 const EDITABLE_IDS = [
@@ -200,12 +194,10 @@ function toggleEditorSidebar() {
 // --- Enhanced getFormData: also saves dynamic blank pages ---
 function getFormData() {
     const data = {};
-    // Save all known editable IDs
     EDITABLE_IDS.forEach(id => {
         const el = document.getElementById(id);
         if (el) data[id] = el.innerHTML;
     });
-    // Save dynamically added blank pages
     const dynamicPages = document.querySelectorAll('[id^="page-blank-"]');
     data.__blankPages = [];
     dynamicPages.forEach(page => {
@@ -221,10 +213,8 @@ function getFormData() {
 
 // --- Enhanced setFormData: re-creates dynamic blank pages ---
 function setFormData(data) {
-    // First, remove any existing dynamic blank pages
     document.querySelectorAll('[id^="page-blank-"]').forEach(p => p.remove());
 
-    // Re-create blank pages if any were saved
     if (data.__blankPages && data.__blankPages.length > 0) {
         const pdfRoot = document.getElementById('pdf-root');
         const page3 = document.getElementById('page3');
@@ -245,7 +235,6 @@ function setFormData(data) {
             } else {
                 pdfRoot.appendChild(newPage);
             }
-            // Wire up editor sidebar auto-open
             const editable = newPage.querySelector('[contenteditable="true"]');
             if (editable) {
                 editable.addEventListener('click', () => {
@@ -259,11 +248,9 @@ function setFormData(data) {
                 EDITABLE_IDS.push(bp.contentId);
             }
         });
-        // Update blankPageCount so new pages get unique IDs
         blankPageCount = Math.max(blankPageCount, data.__blankPages.length + 2);
     }
 
-    // Now restore content for all editable fields
     EDITABLE_IDS.forEach(id => {
         const el = document.getElementById(id);
         if (el && data[id] !== undefined) {
@@ -453,13 +440,11 @@ function insertTableAtCursor() {
     if (isNaN(r) || isNaN(c) || r < 1 || c < 1) return;
 
     let tableHtml = '<table>';
-    // Header row
     tableHtml += '<tr>';
     for (let j = 0; j < c; j++) {
         tableHtml += `<th contenteditable="true">Header ${j + 1}</th>`;
     }
     tableHtml += '</tr>';
-    // Data rows
     for (let i = 0; i < r - 1; i++) {
         tableHtml += '<tr>';
         for (let j = 0; j < c; j++) {
@@ -507,7 +492,6 @@ function updatePageNumbers() {
 function autoSave() {
     const data = getFormData();
     localStorage.setItem('letterhead_autosave', JSON.stringify(data));
-    // Show toast
     const toast = document.getElementById('autosaveToast');
     if (toast) {
         toast.classList.add('show');
@@ -518,7 +502,6 @@ function autoSave() {
 function checkAutoSaveRestore() {
     const saved = localStorage.getItem('letterhead_autosave');
     if (!saved) return;
-    // Show restore banner
     const banner = document.createElement('div');
     banner.className = 'restore-banner';
     banner.innerHTML = `
@@ -603,6 +586,85 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePageNumbers();
     checkAutoSaveRestore();
 
-    // Auto-save every 15 seconds
     setInterval(autoSave, 15000);
+
+    document.addEventListener('input', (e) => {
+        if (e.target.hasAttribute('contenteditable')) {
+            checkOverflow(e.target);
+        }
+    });
 });
+
+// ===================== AUTO PAGINATION =====================
+function checkOverflow(el) {
+    if (el.scrollHeight > el.clientHeight + 5) {
+
+        let contentToMoveNodes = [];
+
+        while (el.scrollHeight > el.clientHeight + 5 && el.lastChild) {
+            let lastNode = el.lastChild;
+
+            while (lastNode && lastNode.nodeType === Node.TEXT_NODE && lastNode.textContent.trim() === '') {
+                let prev = lastNode.previousSibling;
+                el.removeChild(lastNode);
+                lastNode = prev;
+            }
+            if (!lastNode) break;
+
+            if (lastNode.nodeType === Node.TEXT_NODE) {
+                const text = lastNode.textContent;
+                const words = text.split(' ');
+
+                let movedTextChunks = [];
+                while (el.scrollHeight > el.clientHeight + 5 && words.length > 0) {
+                    movedTextChunks.unshift(words.pop());
+                    lastNode.textContent = words.join(' ');
+                }
+
+                if (movedTextChunks.length > 0) {
+                    contentToMoveNodes.unshift(movedTextChunks.join(' ') + ' ');
+                }
+            } else if (lastNode.tagName === 'BR') {
+                contentToMoveNodes.unshift('<br>');
+                el.removeChild(lastNode);
+            } else if (lastNode.nodeType === Node.ELEMENT_NODE) {
+                contentToMoveNodes.unshift(lastNode.outerHTML);
+                el.removeChild(lastNode);
+            }
+        }
+
+        if (contentToMoveNodes.length > 0) {
+            addBlankPage();
+
+            const newPageId = 'body-blank-' + blankPageCount;
+            const newEditable = document.getElementById(newPageId);
+
+            if (newEditable) {
+                newEditable.innerHTML = contentToMoveNodes.join('');
+
+                const range = document.createRange();
+                const sel = window.getSelection();
+
+                newEditable.focus();
+
+                if (newEditable.lastChild) {
+                    if (newEditable.lastChild.nodeType === Node.TEXT_NODE) {
+                        range.setStart(newEditable.lastChild, newEditable.lastChild.length);
+                        range.collapse(true);
+                    } else {
+                        range.selectNodeContents(newEditable);
+                        range.collapse(false);
+                    }
+                } else {
+                    range.selectNodeContents(newEditable);
+                    range.collapse(false);
+                }
+
+                sel.removeAllRanges();
+                sel.addRange(range);
+
+                setTimeout(() => checkOverflow(newEditable), 10);
+            }
+        }
+    }
+}
