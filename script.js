@@ -409,6 +409,8 @@ function formatDoc(cmd, value = null) {
             document.execCommand(cmd, false, null);
         }
     }
+    // After any formatting change, trigger a debounced reflow
+    debouncedReflow();
 }
 
 // ===================== INSERT IMAGE =====================
@@ -588,83 +590,237 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setInterval(autoSave, 15000);
 
+    // Use debounced reflow for all content changes
     document.addEventListener('input', (e) => {
         if (e.target.hasAttribute('contenteditable')) {
-            checkOverflow(e.target);
+            debouncedReflow();
         }
     });
 });
 
 // ===================== AUTO PAGINATION =====================
+let isReflowing = false;
+let reflowTimer = null;
+
+function debouncedReflow() {
+    clearTimeout(reflowTimer);
+    reflowTimer = setTimeout(() => reflow(), 300);
+}
+
+// Get all editable content areas in page order
+function getOrderedEditables() {
+    const pages = Array.from(document.querySelectorAll('#pdf-root > .letterhead.page'));
+    const editables = [];
+    pages.forEach(page => {
+        const el = page.querySelector('.letter-body, .letter-body-page2, .blank-page-content');
+        if (el) editables.push(el);
+    });
+    return editables;
+}
+
+// Find the next editable after the given one, or create a blank page
+function getOrCreateNextEditable(currentEl) {
+    const editables = getOrderedEditables();
+    const idx = editables.indexOf(currentEl);
+    if (idx >= 0 && idx < editables.length - 1) {
+        return editables[idx + 1];
+    }
+    // Need a new page
+    addBlankPage();
+    const newPageId = 'body-blank-' + blankPageCount;
+    return document.getElementById(newPageId);
+}
+
+// Forward overflow: move excess content from el to the next page
 function checkOverflow(el) {
-    if (el.scrollHeight > el.clientHeight + 5) {
+    if (!el || el.scrollHeight <= el.clientHeight + 5) return false;
 
-        let contentToMoveNodes = [];
+    let contentToMoveNodes = [];
 
-        while (el.scrollHeight > el.clientHeight + 5 && el.lastChild) {
-            let lastNode = el.lastChild;
+    while (el.scrollHeight > el.clientHeight + 5 && el.lastChild) {
+        let lastNode = el.lastChild;
 
-            while (lastNode && lastNode.nodeType === Node.TEXT_NODE && lastNode.textContent.trim() === '') {
-                let prev = lastNode.previousSibling;
-                el.removeChild(lastNode);
-                lastNode = prev;
+        // Skip trailing empty text nodes
+        while (lastNode && lastNode.nodeType === Node.TEXT_NODE && lastNode.textContent.trim() === '') {
+            let prev = lastNode.previousSibling;
+            el.removeChild(lastNode);
+            lastNode = prev;
+        }
+        if (!lastNode) break;
+
+        if (lastNode.nodeType === Node.TEXT_NODE) {
+            const text = lastNode.textContent;
+            const words = text.split(' ');
+
+            let movedTextChunks = [];
+            while (el.scrollHeight > el.clientHeight + 5 && words.length > 0) {
+                movedTextChunks.unshift(words.pop());
+                lastNode.textContent = words.join(' ');
             }
-            if (!lastNode) break;
 
-            if (lastNode.nodeType === Node.TEXT_NODE) {
-                const text = lastNode.textContent;
-                const words = text.split(' ');
+            if (movedTextChunks.length > 0) {
+                contentToMoveNodes.unshift(movedTextChunks.join(' ') + ' ');
+            }
+        } else if (lastNode.tagName === 'BR') {
+            contentToMoveNodes.unshift('<br>');
+            el.removeChild(lastNode);
+        } else if (lastNode.nodeType === Node.ELEMENT_NODE) {
+            contentToMoveNodes.unshift(lastNode.outerHTML);
+            el.removeChild(lastNode);
+        }
+    }
 
-                let movedTextChunks = [];
-                while (el.scrollHeight > el.clientHeight + 5 && words.length > 0) {
-                    movedTextChunks.unshift(words.pop());
-                    lastNode.textContent = words.join(' ');
+    if (contentToMoveNodes.length > 0) {
+        const nextEditable = getOrCreateNextEditable(el);
+        if (nextEditable) {
+            // Prepend content to the next editable (overflow goes to top of next page)
+            nextEditable.innerHTML = contentToMoveNodes.join('') + nextEditable.innerHTML;
+        }
+        return true;
+    }
+    return false;
+}
+
+// Backward underflow: pull content from the next page back to this one
+function checkUnderflow(el) {
+    const editables = getOrderedEditables();
+    const idx = editables.indexOf(el);
+    if (idx < 0 || idx >= editables.length - 1) return false;
+
+    const nextEditable = editables[idx + 1];
+    if (!nextEditable || nextEditable.innerHTML.trim() === '' || nextEditable.innerHTML.trim() === '<p>Click here to edit new blank page...</p>') {
+        return false;
+    }
+
+    let pulled = false;
+
+    // Try pulling nodes from the START of the next editable back to the END of this one
+    while (nextEditable.firstChild && el.scrollHeight <= el.clientHeight + 5) {
+        let firstNode = nextEditable.firstChild;
+
+        // Skip leading empty text nodes
+        while (firstNode && firstNode.nodeType === Node.TEXT_NODE && firstNode.textContent.trim() === '') {
+            let next = firstNode.nextSibling;
+            nextEditable.removeChild(firstNode);
+            firstNode = next;
+        }
+        if (!firstNode) break;
+
+        // Clone and tentatively append to current page
+        const cloned = firstNode.cloneNode(true);
+        el.appendChild(cloned);
+
+        // Check if it fits
+        if (el.scrollHeight > el.clientHeight + 5) {
+            // Doesn't fit — put it back
+            el.removeChild(cloned);
+
+            // Try word-by-word for text nodes
+            if (firstNode.nodeType === Node.TEXT_NODE) {
+                const words = firstNode.textContent.split(' ');
+                let fittedWords = [];
+                const testNode = document.createTextNode('');
+                el.appendChild(testNode);
+
+                while (words.length > 0) {
+                    fittedWords.push(words.shift());
+                    testNode.textContent = fittedWords.join(' ');
+                    if (el.scrollHeight > el.clientHeight + 5) {
+                        words.unshift(fittedWords.pop());
+                        break;
+                    }
                 }
 
-                if (movedTextChunks.length > 0) {
-                    contentToMoveNodes.unshift(movedTextChunks.join(' ') + ' ');
+                if (fittedWords.length > 0) {
+                    testNode.textContent = fittedWords.join(' ') + ' ';
+                    firstNode.textContent = words.join(' ');
+                    pulled = true;
+                } else {
+                    el.removeChild(testNode);
                 }
-            } else if (lastNode.tagName === 'BR') {
-                contentToMoveNodes.unshift('<br>');
-                el.removeChild(lastNode);
-            } else if (lastNode.nodeType === Node.ELEMENT_NODE) {
-                contentToMoveNodes.unshift(lastNode.outerHTML);
-                el.removeChild(lastNode);
+            }
+            break;
+        } else {
+            // It fits — remove from next page
+            nextEditable.removeChild(firstNode);
+            pulled = true;
+        }
+    }
+
+    return pulled;
+}
+
+// Clean up empty dynamically-created blank pages
+function cleanupEmptyPages() {
+    const blankPages = document.querySelectorAll('[id^="page-blank-"]');
+    blankPages.forEach(page => {
+        const contentEl = page.querySelector('[contenteditable="true"]');
+        if (contentEl) {
+            const text = contentEl.innerText.trim();
+            const html = contentEl.innerHTML.trim();
+            if (text === '' || html === '' || html === '<br>' || html === '<p><br></p>') {
+                page.remove();
+            }
+        }
+    });
+}
+
+// Main reflow: run forward overflow, then backward underflow, then cleanup
+function reflow() {
+    if (isReflowing) return;
+    isReflowing = true;
+
+    try {
+        // Save cursor position
+        const sel = window.getSelection();
+        let savedAnchorNode = sel.anchorNode;
+        let savedAnchorOffset = sel.anchorOffset;
+
+        // Pass 1: Forward overflow — process each editable in order
+        let maxPasses = 20;
+        let changed = true;
+        while (changed && maxPasses-- > 0) {
+            changed = false;
+            const editables = getOrderedEditables();
+            for (const el of editables) {
+                if (checkOverflow(el)) {
+                    changed = true;
+                }
             }
         }
 
-        if (contentToMoveNodes.length > 0) {
-            addBlankPage();
-
-            const newPageId = 'body-blank-' + blankPageCount;
-            const newEditable = document.getElementById(newPageId);
-
-            if (newEditable) {
-                newEditable.innerHTML = contentToMoveNodes.join('');
-
-                const range = document.createRange();
-                const sel = window.getSelection();
-
-                newEditable.focus();
-
-                if (newEditable.lastChild) {
-                    if (newEditable.lastChild.nodeType === Node.TEXT_NODE) {
-                        range.setStart(newEditable.lastChild, newEditable.lastChild.length);
-                        range.collapse(true);
-                    } else {
-                        range.selectNodeContents(newEditable);
-                        range.collapse(false);
-                    }
-                } else {
-                    range.selectNodeContents(newEditable);
-                    range.collapse(false);
+        // Pass 2: Backward underflow — process each editable in order
+        maxPasses = 20;
+        changed = true;
+        while (changed && maxPasses-- > 0) {
+            changed = false;
+            const editables = getOrderedEditables();
+            for (const el of editables) {
+                if (checkUnderflow(el)) {
+                    changed = true;
                 }
+            }
+        }
 
+        // Pass 3: Cleanup empty blank pages
+        cleanupEmptyPages();
+
+        // Update page numbers
+        updatePageNumbers();
+
+        // Restore cursor if possible
+        try {
+            if (savedAnchorNode && savedAnchorNode.parentNode) {
+                const range = document.createRange();
+                range.setStart(savedAnchorNode, Math.min(savedAnchorOffset, savedAnchorNode.length || 0));
+                range.collapse(true);
                 sel.removeAllRanges();
                 sel.addRange(range);
-
-                setTimeout(() => checkOverflow(newEditable), 10);
             }
+        } catch (e) {
+            // Cursor restoration failed, that's okay
         }
+    } finally {
+        isReflowing = false;
     }
 }

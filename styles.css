@@ -597,19 +597,22 @@ body {
 }
 
 .letter-body {
-    max-height: 520px;
+    flex: 1;
+    min-height: 0;
     margin-bottom: 20px;
     overflow: hidden;
-    /* Hide scrollbar, let JS handle pagination */
+    /* No fixed max-height — flex fills available space in the page */
 }
 
 .letter-body-page2 {
-    max-height: 800px;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
 }
 
 .blank-page-content {
-    max-height: 800px;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -701,6 +704,7 @@ body {
     display: flex;
     flex-direction: column;
     flex: 1;
+    min-height: 0;
     padding: 50px;
     font-size: 14px;
     line-height: 1.7;
