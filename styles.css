@@ -610,11 +610,7 @@ body {
     overflow: hidden;
 }
 
-.blank-page-content {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-}
+/* .blank-page-content styles merged below */
 
 
 
@@ -701,14 +697,14 @@ body {
 }
 
 .blank-page-content {
-    display: flex;
-    flex-direction: column;
+    /* display: block (default) — do NOT use flex here; it breaks scrollHeight measurement */
     flex: 1;
     min-height: 0;
-    padding: 50px;
+    overflow: hidden;
     font-size: 14px;
     line-height: 1.7;
     color: var(--text-dark);
+    /* Padding comes from parent .content element */
 }
 
 /* Page label */

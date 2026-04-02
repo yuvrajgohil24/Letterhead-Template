@@ -594,6 +594,11 @@ function addBlankPage() {
             toggleEditorSidebar();
         }
     });
+    // Trigger reflow quickly on paste so overflow moves to next page immediately
+    editable.addEventListener('paste', () => {
+        clearTimeout(reflowTimer);
+        reflowTimer = setTimeout(() => reflow(), 100);
+    });
 
     if (!EDITABLE_IDS.includes('body-blank-' + blankPageCount)) {
         EDITABLE_IDS.push('body-blank-' + blankPageCount);
@@ -652,13 +657,35 @@ function getOrCreateNextEditable(currentEl) {
     return document.getElementById(newPageId);
 }
 
+// ---- Shared overflow measurement helper ----
+// Returns true if el's content exceeds its visible height.
+// Uses scrollHeight primarily; falls back to a DOM clone for blank-page-content
+// because block-in-flex layouts can sometimes misreport scrollHeight.
+function isOverflowing(el) {
+    if (el.scrollHeight > el.clientHeight + 5) return true;
+    if (!el.classList.contains('blank-page-content')) return false;
+    // Clone-based natural height measurement (no layout side-effects)
+    const clone = el.cloneNode(true);
+    clone.style.cssText =
+        'position:absolute;visibility:hidden;pointer-events:none;' +
+        'overflow:visible;height:auto;max-height:none;' +
+        'width:' + el.offsetWidth + 'px;flex:none;';
+    document.body.appendChild(clone);
+    const naturalH = clone.offsetHeight;
+    document.body.removeChild(clone);
+    return naturalH > el.clientHeight + 5;
+}
+
 // Forward overflow: move excess content from el to the next page
 function checkOverflow(el) {
-    if (!el || el.scrollHeight <= el.clientHeight + 5) return false;
+    if (!el || !isOverflowing(el)) return false;
 
     let contentToMoveNodes = [];
 
-    while (el.scrollHeight > el.clientHeight + 5 && el.lastChild) {
+    // Remove nodes from the bottom until the element no longer overflows.
+    // Both the outer loop and the inner word-split loop call isOverflowing()
+    // so they work correctly even if scrollHeight is unreliable.
+    while (isOverflowing(el) && el.lastChild) {
         let lastNode = el.lastChild;
 
         // Skip trailing empty text nodes
@@ -670,15 +697,12 @@ function checkOverflow(el) {
         if (!lastNode) break;
 
         if (lastNode.nodeType === Node.TEXT_NODE) {
-            const text = lastNode.textContent;
-            const words = text.split(' ');
-
+            const words = lastNode.textContent.split(' ');
             let movedTextChunks = [];
-            while (el.scrollHeight > el.clientHeight + 5 && words.length > 0) {
+            while (isOverflowing(el) && words.length > 0) {
                 movedTextChunks.unshift(words.pop());
                 lastNode.textContent = words.join(' ');
             }
-
             if (movedTextChunks.length > 0) {
                 contentToMoveNodes.unshift(movedTextChunks.join(' ') + ' ');
             }
@@ -694,7 +718,6 @@ function checkOverflow(el) {
     if (contentToMoveNodes.length > 0) {
         const nextEditable = getOrCreateNextEditable(el);
         if (nextEditable) {
-            // Prepend content to the next editable (overflow goes to top of next page)
             nextEditable.innerHTML = contentToMoveNodes.join('') + nextEditable.innerHTML;
         }
         return true;
