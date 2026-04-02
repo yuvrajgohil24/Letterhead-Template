@@ -364,6 +364,27 @@ function importData(input) {
 // ===================== SELECTION & FORMATTING =====================
 let lastSelection = null;
 
+// Track which editable is currently focused (used to block underflow from stealing content)
+let focusedEditable = null;
+
+document.addEventListener('focusin', (e) => {
+    if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
+        focusedEditable = e.target;
+    }
+});
+
+document.addEventListener('focusout', (e) => {
+    // Keep reference for a brief moment so paste events still have context
+    setTimeout(() => {
+        if (document.activeElement && document.activeElement.hasAttribute &&
+            document.activeElement.hasAttribute('contenteditable')) {
+            focusedEditable = document.activeElement;
+        } else {
+            focusedEditable = null;
+        }
+    }, 200);
+});
+
 function saveSelection() {
     const sel = window.getSelection();
     if (sel.rangeCount > 0) {
@@ -690,6 +711,17 @@ function checkUnderflow(el) {
     const nextEditable = editables[idx + 1];
     if (!nextEditable || nextEditable.innerHTML.trim() === '' || nextEditable.innerHTML.trim() === '<p>Click here to edit new blank page...</p>') {
         return false;
+    }
+
+    // IMPORTANT FIX: If the user is currently editing a page BELOW this one,
+    // do NOT pull content up from that page (or any page below it).
+    // This prevents manually pasted content from being sucked up to a previous page.
+    if (focusedEditable) {
+        const focusedIdx = editables.indexOf(focusedEditable);
+        // If the next editable is AT or AFTER the focused editable, skip underflow for it
+        if (focusedIdx >= 0 && (idx + 1) >= focusedIdx) {
+            return false;
+        }
     }
 
     let pulled = false;
