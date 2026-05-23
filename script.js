@@ -784,7 +784,7 @@ function checkUnderflow(el) {
     let pulled = false;
 
     // Try pulling nodes from the START of the next editable back to the END of this one
-    while (nextEditable.firstChild && el.scrollHeight <= el.clientHeight + 5) {
+    while (nextEditable.firstChild && !isOverflowing(el)) {
         let firstNode = nextEditable.firstChild;
 
         // Skip leading empty text nodes
@@ -800,7 +800,7 @@ function checkUnderflow(el) {
         el.appendChild(cloned);
 
         // Check if it fits
-        if (el.scrollHeight > el.clientHeight + 5) {
+        if (isOverflowing(el)) {
             // Doesn't fit — put it back
             el.removeChild(cloned);
 
@@ -814,7 +814,7 @@ function checkUnderflow(el) {
                 while (words.length > 0) {
                     fittedWords.push(words.shift());
                     testNode.textContent = fittedWords.join(' ');
-                    if (el.scrollHeight > el.clientHeight + 5) {
+                    if (isOverflowing(el)) {
                         words.unshift(fittedWords.pop());
                         break;
                     }
