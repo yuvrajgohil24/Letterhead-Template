@@ -364,12 +364,13 @@ function importData(input) {
 // ===================== SELECTION & FORMATTING =====================
 let lastSelection = null;
 
-// Track which editable is currently focused (used to block underflow from stealing content)
 let focusedEditable = null;
+let lastFocusedPage = null;
 
 document.addEventListener('focusin', (e) => {
     if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
         focusedEditable = e.target;
+        lastFocusedPage = e.target.closest('.page');
     }
 });
 
@@ -581,7 +582,9 @@ function addBlankPage() {
         <button onclick="this.parentElement.remove(); updatePageNumbers();" style="position: absolute; top: 15px; right: 20px; background: #ffefef; color: #d32f2f; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; z-index: 10;">🗑️ Remove Page</button>
     `;
 
-    if (page3) {
+    if (lastFocusedPage) {
+        lastFocusedPage.insertAdjacentElement('afterend', newPage);
+    } else if (page3) {
         pdfRoot.insertBefore(newPage, page3);
     } else {
         pdfRoot.appendChild(newPage);
@@ -710,8 +713,39 @@ function checkOverflow(el) {
             contentToMoveNodes.unshift('<br>');
             el.removeChild(lastNode);
         } else if (lastNode.nodeType === Node.ELEMENT_NODE) {
-            contentToMoveNodes.unshift(lastNode.outerHTML);
-            el.removeChild(lastNode);
+            if (lastNode.tagName === 'TABLE') {
+                const rows = Array.from(lastNode.rows);
+                if (rows.length > 1) {
+                    let movedRowsHtml = '';
+                    while (isOverflowing(el) && rows.length > 1) {
+                        const lastRow = rows.pop();
+                        if (lastRow.parentNode.tagName === 'THEAD' && rows.length === 0) break;
+                        movedRowsHtml = lastRow.outerHTML + movedRowsHtml;
+                        lastRow.remove();
+                    }
+                    if (movedRowsHtml) {
+                        const tableClone = lastNode.cloneNode(false);
+                        const thead = lastNode.querySelector('thead');
+                        if (thead) tableClone.appendChild(thead.cloneNode(true));
+                        const newTbody = document.createElement('tbody');
+                        newTbody.innerHTML = movedRowsHtml;
+                        tableClone.appendChild(newTbody);
+                        contentToMoveNodes.unshift(tableClone.outerHTML);
+                    } else {
+                        if (el.childNodes.length === 1) break; // Cannot split and is the only element
+                        contentToMoveNodes.unshift(lastNode.outerHTML);
+                        el.removeChild(lastNode);
+                    }
+                } else {
+                    if (el.childNodes.length === 1) break; // Cannot split 1-row table and is the only element
+                    contentToMoveNodes.unshift(lastNode.outerHTML);
+                    el.removeChild(lastNode);
+                }
+            } else {
+                if (el.childNodes.length === 1) break; // Prevent infinite loop if element is too large to fit
+                contentToMoveNodes.unshift(lastNode.outerHTML);
+                el.removeChild(lastNode);
+            }
         }
     }
 
