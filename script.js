@@ -176,9 +176,7 @@ async function downloadPDF() {
 
 // ===================== DRAFTS & EXPORT LOGIC =====================
 const EDITABLE_IDS = [
-    'ref-no', 'letter-date', 'recipient-block', 'body-p1',
-    'sign-1', 'sign-2', 'body-p2', 'sign-3', 'sign-4',
-    'body-p3', 'sign-5', 'sign-6'
+    'body-p1', 'body-p3'
 ];
 
 function toggleSidebar() {
@@ -625,7 +623,110 @@ document.addEventListener('DOMContentLoaded', () => {
             debouncedReflow();
         }
     });
+
+    // ===================== PASTE SANITIZER =====================
+    // Intercept paste on ALL contenteditable elements.
+    // Strips all inline styles, background colors, and unwanted tags
+    // so that content pasted from dark-theme apps (Claude, VS Code, etc.)
+    // does not break the letter layout.
+    document.addEventListener('paste', (e) => {
+        const target = e.target;
+        if (!target || !target.isContentEditable) return;
+        e.preventDefault();
+
+        // Prefer HTML from clipboard so we preserve bold/italic/lists,
+        // but we sanitize it heavily.
+        let html = (e.clipboardData || window.clipboardData).getData('text/html');
+        let text = (e.clipboardData || window.clipboardData).getData('text/plain');
+
+        if (html) {
+            html = sanitizePastedHTML(html);
+        } else {
+            // Fall back to plain text — convert newlines to <br> / <p>
+            html = text
+                .split(/\n/)
+                .map(line => line.trim() ? `<p>${escapeHTML(line)}</p>` : '<br>')
+                .join('');
+        }
+
+        // Insert the sanitized HTML at the cursor
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount) {
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            const frag = range.createContextualFragment(html);
+            range.insertNode(frag);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+        debouncedReflow();
+        // Second safety pass after a longer delay to catch any layout measurements
+        // that weren't ready during the first pass (e.g. images, complex flex layout).
+        setTimeout(() => reflow(), 600);
+    }, true);
 });
+
+// Escape special HTML chars for plain-text fallback
+function escapeHTML(str) {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// Deep-clean pasted HTML:
+// - Remove dangerous/structural tags entirely (script, style, head, meta, iframe...)
+// - Keep text-level semantics: b, strong, i, em, u, s, p, br, ul, ol, li, h1-h6, a
+// - Strip ALL inline styles, class, id, background, color attributes from every element
+function sanitizePastedHTML(html) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    // Remove tags we never want
+    const REMOVE_TAGS = ['script','style','head','meta','link','iframe','object','embed','form','input','button','select','textarea','svg','canvas'];
+    REMOVE_TAGS.forEach(tag => {
+        doc.querySelectorAll(tag).forEach(el => el.remove());
+    });
+
+    // Allowed tags — everything else gets replaced with its children
+    const ALLOW_TAGS = new Set(['p','br','b','strong','i','em','u','s','strike','ul','ol','li','h1','h2','h3','h4','h5','h6','a','span','div','table','thead','tbody','tr','th','td','blockquote','code','pre']);
+
+    function cleanNode(node) {
+        if (node.nodeType === Node.TEXT_NODE) return;
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+            node.remove();
+            return;
+        }
+        const tag = node.tagName.toLowerCase();
+        // Recursively clean children first
+        Array.from(node.childNodes).forEach(cleanNode);
+
+        if (!ALLOW_TAGS.has(tag)) {
+            // Unwrap: replace element with its children
+            const parent = node.parentNode;
+            if (parent) {
+                while (node.firstChild) parent.insertBefore(node.firstChild, node);
+                parent.removeChild(node);
+            }
+            return;
+        }
+
+        // Strip all attributes except href on <a> and a minimal set on <td>/<th>
+        const attrsToKeep = tag === 'a' ? ['href'] : (tag === 'td' || tag === 'th') ? ['colspan','rowspan'] : [];
+        Array.from(node.attributes).forEach(attr => {
+            if (!attrsToKeep.includes(attr.name)) {
+                node.removeAttribute(attr.name);
+            }
+        });
+        // Ensure no residual style/color
+        node.style && (node.style.cssText = '');
+    }
+
+    Array.from(doc.body.childNodes).forEach(cleanNode);
+    return doc.body.innerHTML;
+}
 
 // ===================== AUTO PAGINATION =====================
 let isReflowing = false;
@@ -633,7 +734,7 @@ let reflowTimer = null;
 
 function debouncedReflow() {
     clearTimeout(reflowTimer);
-    reflowTimer = setTimeout(() => reflow(), 300);
+    reflowTimer = setTimeout(() => reflow(), 400);
 }
 
 // Get all editable content areas in page order
@@ -661,22 +762,63 @@ function getOrCreateNextEditable(currentEl) {
 }
 
 // ---- Shared overflow measurement helper ----
-// Returns true if el's content exceeds its visible height.
-// Uses scrollHeight primarily; falls back to a DOM clone for blank-page-content
-// because block-in-flex layouts can sometimes misreport scrollHeight.
+// Returns true if el's content exceeds its visible (client) height.
+//
+// KEY INSIGHT: Inside a flex column with overflow:hidden, browsers frequently
+// report scrollHeight === clientHeight even when content is visually clipped.
+// This makes the scrollHeight approach unreliable.
+//
+// SOLUTION: Use getBoundingClientRect(). With overflow:hidden on the parent,
+// child elements are still laid out at their natural positions — only the
+// *painting* is clipped. So a child whose getBoundingClientRect().bottom
+// exceeds the parent's getBoundingClientRect().bottom is definitively overflowing.
 function isOverflowing(el) {
+    // 1. Fast path: check if scrollHeight exceeds clientHeight (now reliable due to CSS min-height constraint)
     if (el.scrollHeight > el.clientHeight + 5) return true;
-    if (!el.classList.contains('blank-page-content')) return false;
-    // Clone-based natural height measurement (no layout side-effects)
-    const clone = el.cloneNode(true);
-    clone.style.cssText =
-        'position:absolute;visibility:hidden;pointer-events:none;' +
-        'overflow:visible;height:auto;max-height:none;' +
-        'width:' + el.offsetWidth + 'px;flex:none;';
-    document.body.appendChild(clone);
-    const naturalH = clone.offsetHeight;
-    document.body.removeChild(clone);
-    return naturalH > el.clientHeight + 5;
+
+    // Get element bounding rectangle
+    const elRect = el.getBoundingClientRect();
+    if (elRect.height < 2) return false; // Element not rendered yet — skip
+
+    // 2. Range-based content bottom check:
+    // Creates a range spanning all text and elements inside el, and gets its bounding box.
+    // This ignores any scroll container limitations and yields the true layout bottom of all contents.
+    if (el.firstChild) {
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const rangeRect = range.getBoundingClientRect();
+            if (rangeRect.height > 0 && rangeRect.bottom > elRect.bottom + 5) {
+                return true;
+            }
+        } catch (e) {
+            // Ignore Range errors
+        }
+    }
+
+    // 3. Fallback path: walk backwards to check if the last rendered child extends below the bottom boundary
+    return lastChildExceedsBottom(el, elRect.bottom);
+}
+
+// Check if the last meaningful node inside `el` extends below `bottomLimit` (px, viewport coords).
+function lastChildExceedsBottom(el, bottomLimit) {
+    // Walk backwards to find the last rendered child
+    let node = el.lastChild;
+    while (node) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            const r = node.getBoundingClientRect();
+            if (r.height > 0) return r.bottom > bottomLimit + 5;
+        } else if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+            try {
+                const range = document.createRange();
+                range.selectNodeContents(node);
+                const r = range.getBoundingClientRect();
+                if (r.height > 0) return r.bottom > bottomLimit + 5;
+            } catch (e) { /* ignore */ }
+        }
+        node = node.previousSibling;
+    }
+    return false;
 }
 
 // Forward overflow: move excess content from el to the next page
@@ -686,8 +828,6 @@ function checkOverflow(el) {
     let contentToMoveNodes = [];
 
     // Remove nodes from the bottom until the element no longer overflows.
-    // Both the outer loop and the inner word-split loop call isOverflowing()
-    // so they work correctly even if scrollHeight is unreliable.
     while (isOverflowing(el) && el.lastChild) {
         let lastNode = el.lastChild;
 
@@ -732,17 +872,26 @@ function checkOverflow(el) {
                         tableClone.appendChild(newTbody);
                         contentToMoveNodes.unshift(tableClone.outerHTML);
                     } else {
-                        if (el.childNodes.length === 1) break; // Cannot split and is the only element
+                        if (el.childNodes.length === 1) break;
                         contentToMoveNodes.unshift(lastNode.outerHTML);
                         el.removeChild(lastNode);
                     }
                 } else {
-                    if (el.childNodes.length === 1) break; // Cannot split 1-row table and is the only element
+                    if (el.childNodes.length === 1) break;
                     contentToMoveNodes.unshift(lastNode.outerHTML);
                     el.removeChild(lastNode);
                 }
             } else {
-                if (el.childNodes.length === 1) break; // Prevent infinite loop if element is too large to fit
+                if (el.childNodes.length === 1 && lastNode.childNodes.length > 0) {
+                    // Unwrap so children can be paginated individually
+                    while (lastNode.firstChild) {
+                        el.insertBefore(lastNode.firstChild, lastNode);
+                    }
+                    el.removeChild(lastNode);
+                    continue;
+                } else if (el.childNodes.length === 1) {
+                    break;
+                }
                 contentToMoveNodes.unshift(lastNode.outerHTML);
                 el.removeChild(lastNode);
             }
@@ -752,7 +901,20 @@ function checkOverflow(el) {
     if (contentToMoveNodes.length > 0) {
         const nextEditable = getOrCreateNextEditable(el);
         if (nextEditable) {
-            nextEditable.innerHTML = contentToMoveNodes.join('') + nextEditable.innerHTML;
+            // Clear the placeholder text that blank pages start with
+            const placeholders = [
+                '<p>Click here to edit new blank page...</p>',
+                '<p>(Continue your letter content here...)</p>',
+                '<p>Click to edit and add more content for this page.</p>'
+            ];
+            let currentHTML = nextEditable.innerHTML.trim();
+            if (placeholders.some(p => currentHTML === p || currentHTML.startsWith(p))) {
+                // Strip the leading placeholder paragraph before prepending
+                placeholders.forEach(p => { currentHTML = currentHTML.replace(p, '').trim(); });
+                nextEditable.innerHTML = contentToMoveNodes.join('') + (currentHTML ? currentHTML : '');
+            } else {
+                nextEditable.innerHTML = contentToMoveNodes.join('') + currentHTML;
+            }
         }
         return true;
     }
@@ -766,7 +928,13 @@ function checkUnderflow(el) {
     if (idx < 0 || idx >= editables.length - 1) return false;
 
     const nextEditable = editables[idx + 1];
-    if (!nextEditable || nextEditable.innerHTML.trim() === '' || nextEditable.innerHTML.trim() === '<p>Click here to edit new blank page...</p>') {
+    const PLACEHOLDERS = [
+        '<p>Click here to edit new blank page...</p>',
+        '<p>(Continue your letter content here...)</p>',
+        '<p>Click to edit and add more content for this page.</p>'
+    ];
+    const nextHTML = nextEditable ? nextEditable.innerHTML.trim() : '';
+    if (!nextEditable || nextHTML === '' || PLACEHOLDERS.includes(nextHTML)) {
         return false;
     }
 
@@ -826,9 +994,59 @@ function checkUnderflow(el) {
                     pulled = true;
                 } else {
                     el.removeChild(testNode);
+                    break;
                 }
+            } else if (['DIV', 'P', 'UL', 'OL', 'LI', 'SPAN', 'B', 'I', 'U', 'STRONG', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(firstNode.tagName) && firstNode.childNodes.length > 0) {
+                const wrapper = firstNode.cloneNode(false);
+                el.appendChild(wrapper);
+                
+                let pulledChild = false;
+                while (firstNode.firstChild) {
+                    const childCloned = firstNode.firstChild.cloneNode(true);
+                    wrapper.appendChild(childCloned);
+                    if (isOverflowing(el)) {
+                        wrapper.removeChild(childCloned);
+                        if (firstNode.firstChild.nodeType === Node.TEXT_NODE) {
+                            const words = firstNode.firstChild.textContent.split(' ');
+                            let fittedWords = [];
+                            const testNode = document.createTextNode('');
+                            wrapper.appendChild(testNode);
+
+                            while (words.length > 0) {
+                                fittedWords.push(words.shift());
+                                testNode.textContent = fittedWords.join(' ');
+                                if (isOverflowing(el)) {
+                                    words.unshift(fittedWords.pop());
+                                    break;
+                                }
+                            }
+                            if (fittedWords.length > 0) {
+                                testNode.textContent = fittedWords.join(' ') + ' ';
+                                firstNode.firstChild.textContent = words.join(' ');
+                                pulledChild = true;
+                            } else {
+                                wrapper.removeChild(testNode);
+                            }
+                        }
+                        break;
+                    } else {
+                        firstNode.removeChild(firstNode.firstChild);
+                        pulledChild = true;
+                    }
+                }
+                if (!pulledChild) {
+                    el.removeChild(wrapper);
+                    break;
+                }
+                pulled = true;
+                if (firstNode.childNodes.length === 0) {
+                    nextEditable.removeChild(firstNode);
+                } else {
+                    break;
+                }
+            } else {
+                break;
             }
-            break;
         } else {
             // It fits — remove from next page
             nextEditable.removeChild(firstNode);
@@ -858,6 +1076,10 @@ function cleanupEmptyPages() {
 function reflow() {
     if (isReflowing) return;
     isReflowing = true;
+
+    // Freeze the viewport scroll so reflow DOM mutations don't cause the page to jump
+    const savedScrollX = window.scrollX;
+    const savedScrollY = window.scrollY;
 
     try {
         // Save cursor position
@@ -911,5 +1133,7 @@ function reflow() {
         }
     } finally {
         isReflowing = false;
+        // Restore the viewport scroll position so the user's view doesn't jump
+        window.scrollTo(savedScrollX, savedScrollY);
     }
 }

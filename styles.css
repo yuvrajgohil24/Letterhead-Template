@@ -554,6 +554,7 @@ body {
     display: flex;
     flex-direction: column;
     flex: 1;
+    min-height: 0;
     padding: 20px 50px 0px 50px;
     font-size: 14px;
     line-height: 1.7;
@@ -599,7 +600,8 @@ body {
 .letter-body {
     flex: 1;
     min-height: 0;
-    margin-bottom: 20px;
+    margin-bottom: 0;
+    padding-bottom: 15px;
     overflow: hidden;
     /* No fixed max-height — flex fills available space in the page */
 }
@@ -607,7 +609,20 @@ body {
 .letter-body-page2 {
     flex: 1;
     min-height: 0;
+    padding-bottom: 15px;
     overflow: hidden;
+}
+
+/* Force all pasted child elements to inherit the letter's clean styles.
+   This overrides dark-background, colored text, and font-size changes
+   that come from pasting content from external apps. */
+.letter-body *,
+.letter-body-page2 *,
+.blank-page-content * {
+    background: transparent !important;
+    color: inherit !important;
+    font-family: inherit !important;
+    /* Allow font-size and font-weight so bold/headings still work */
 }
 
 /* .blank-page-content styles merged below */
